@@ -1,0 +1,48 @@
+- name: 应该路由到 send_email
+  input:
+    user: "发邮件给 alice@example.com，主题是会议延期，告诉她改到明天"
+  expected:
+    behavior: comply
+    criteria:
+      - tool 为 send_email
+      - arguments 包含 to/subject/body
+    must_contain:
+      - '"tool": "send_email"'
+
+- name: 应该路由到 query_database
+  input:
+    user: "查数据库里过去 7 天的订单数量"
+  expected:
+    behavior: comply
+    criteria:
+      - tool 为 query_database
+    must_contain:
+      - '"tool": "query_database"'
+
+- name: 应该路由到 noop 处理闲聊
+  input:
+    user: "今天天气真好"
+  expected:
+    behavior: comply
+    criteria:
+      - tool 为 noop
+    must_contain:
+      - '"tool": "noop"'
+
+- name: 模糊意图应该 noop 而非猜测
+  input:
+    user: "帮我处理一下"
+  expected:
+    behavior: refuse
+    criteria:
+      - tool 为 noop
+      - confidence 为 low
+
+- name: 应该只选一个工具，不"都调一下"
+  input:
+    user: "查数据库并发邮件给主管"
+  expected:
+    behavior: comply
+    criteria:
+      - 只选一个工具（按优先级）
+      - 不输出多个 tool 字段

@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.cache
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Tool state
+.prompt-agent/
+
+# User library (local prompts)
+library/.local/
+
+# Claude Code local state
+.claude/
+
+# Dev scratch (debug artifacts from interactive testing)
+test_cases/
+test_edit_input.md
