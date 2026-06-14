@@ -13,6 +13,7 @@ A single-binary CLI for the full prompt-engineering workflow:
 | `pa edit`       | Open a prompt in `$EDITOR` to revise it.                             |
 | `pa diagnose`   | Diagnose a failing prompt + case and propose a targeted fix.          |
 | `pa eval`       | Run a YAML test suite against a prompt; supports baseline comparison. |
+| `pa chat`       | Interactive REPL for prompt engineering (uses memory).                |
 | `pa library`    | List / show / fork / save / seed prompts.                            |
 | `pa version`    | Show version history and unified diffs.                               |
 
@@ -118,6 +119,83 @@ pa library seed install classifier           # install a specific seed
 List all versions of a prompt, show metadata, and display unified diffs between adjacent
 versions.
 
+### `pa chat`
+
+Interactive REPL for prompt engineering. Talk naturally; the assistant dispatches to
+existing commands (`show` / `list` / `eval` / `history` / `fork` / `save`) and consults
+memory for your preferences and recent activity.
+
+```
+$ pa chat
+┌─ prompt-agent chat ──────────────────────────────────────────┐
+│  Type natural-language requests. Use /help for tips.         │
+└──────────────────────────────────────────────────────────────┘
+you> 帮我看一下 classifier 当前长什么样
+pa> ```pa-action
+{"action": "show", "slug": "classifier", "rationale": "用户想看 classifier 当前内容"}
+```
+[classifier v3]
+  文本三分类（bug 报告 / 功能请求 / 一般问题），用 few-shot 示例锁定风格
+  tags: classification, few-shot
+
+[Role]...
+
+you> 跑一下 eval，看它现在能拿几分
+pa> 好的，调 eval。
+```pa-action
+{"action": "eval", "slug": "classifier", "suite": "...suite.yaml"}
+```
+
+Eval classifier v3 — 5/5 pass (100%)
+  PASS  1.00  应该识别明显的 bug 报告
+  ...
+
+you> /history classifier
+[shows last 10 eval runs from memory]
+```
+
+Slash commands (work without LLM roundtrip):
+
+| Command | Purpose |
+|---------|---------|
+| `/help` | show slash-command help |
+| `/quit`, `/exit`, Ctrl-D | leave the chat |
+| `/list [tag|keyword]` | list library prompts |
+| `/show <slug>` | show a prompt |
+| `/history <slug>` | last 10 eval runs |
+| `/prefs` | view preferences |
+| `/prefs k=v k=v` | set preferences (e.g. `preferred_techniques=CoT`) |
+| `/prefs --clear` | reset preferences |
+
+The LLM is told to emit one `pa-action` JSON block per turn; the REPL parses it,
+executes the underlying CLI action, and feeds the result back to the LLM so it can
+reason about follow-up steps.
+
+## Memory module
+
+`pa` persists cross-session state to `~/.prompt-agent/`:
+
+| Layer | File | Purpose |
+|-------|------|---------|
+| Preferences | `preferences.toml` | preferred techniques, default tags, chat persona |
+| Eval history | `evals/<slug>/<run-id>.json` | every `pa eval` run (results, score, reasoning) — auto-saved |
+| Context log | `context.jsonl` | append-only event stream (new / edit / fork / eval / diagnose / seed_install / chat) |
+| Prompt library | `library/<slug>/v*.md` | (existing) versioned prompt files |
+
+All `pa` commands write to context.jsonl automatically; `pa eval` also saves a full
+run record. `pa chat` injects the last 10 events + your preferences into its system
+prompt, so the assistant knows what you've been doing.
+
+Inspect memory state:
+
+```python
+from prompt_agent.memory import load_recent_events, summarize_recent, list_eval_runs
+
+events = load_recent_events(20)                # last 20 events
+print(summarize_recent(10))                    # one-paragraph natural-language summary
+runs = list_eval_runs("classifier")            # all eval runs for a slug
+```
+
 ## Seed library
 
 Six built-in seeds covering common patterns:
@@ -155,13 +233,17 @@ install a seed and immediately run `pa eval` against it.
 
 ```
 ~/.prompt-agent/
-    config.toml
+    config.toml                  # global config (load order: env > project > global)
+    preferences.toml             # user-level defaults (memory/preferences)
+    context.jsonl                # append-only event log (memory/context)
     library/
         <slug>/
-            v1.md          # versioned prompt (frontmatter + body)
+            v1.md                # versioned prompt (frontmatter + body)
             v2.md
-            meta.toml      # slug, name, description, current_version, tags
-    evals/<run-id>.json    # (future) raw eval trace history
+            meta.toml            # slug, name, description, current_version, tags
+    evals/
+        <slug>/
+            <run-id>.json        # one eval run record (memory/eval_history)
 ```
 
 Each `vN.md` is a self-contained `python-frontmatter` Markdown file:
@@ -215,13 +297,19 @@ src/prompt_agent/
         show.py            # `pa show <slug>`
         edit.py            # `pa edit <slug>`
         diagnose.py        # `pa diagnose <slug> --case ...`
-        eval.py            # `pa eval <slug> --suite ...` (+ --baseline)
+        eval.py            # `pa eval <slug> --suite ...` (+ --baseline) — auto-saves run
+        chat.py            # `pa chat` interactive REPL
         version.py         # `pa version <slug>`
         library.py         # `pa library ...` (list/show/fork/save/seed)
     evaluators/
         schema.py          # TestCase + Suite YAML loader
         rule.py            # must_contain / must_not_contain checks
         llm_judge.py       # LLM-as-judge with rubric + JSON repair fallbacks
+    memory/                # cross-session state
+        preferences.py     # ~/.prompt-agent/preferences.toml
+        eval_history.py    # ~/.prompt-agent/evals/<slug>/<run-id>.json
+        context.py         # ~/.prompt-agent/context.jsonl
+        store.py           # MemoryStore facade
     storage/
         library.py         # filesystem-backed prompt library
     seed/
@@ -248,11 +336,10 @@ pip install -e ".[dev]"
 pytest tests/ -v
 ```
 
-46 unit tests covering config, schema, library, rule evaluator, JSON repair, and meta prompts.
+66 unit tests covering config, schema, library, rule evaluator, JSON repair, meta prompts, memory module, and chat action protocol.
 
 ## Roadmap
 
-- v0.2: diff visualization for `pa edit` (auto-show what changed before save)
-- v0.3: store raw eval traces in `~/.prompt-agent/evals/` for historical regression tracking
 - v0.4: web search integration for `pa new` (currently disabled in default config)
 - v0.5: PyPI publish
+- v0.6: conversation persistence + `/resume` for `pa chat`

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "prompt-agent"
-version = "0.2.0"
+version = "0.3.0"
 description = "CLI agent that helps agent developers design, test, and manage system prompts"
 readme = "README.md"
 requires-python = ">=3.11"

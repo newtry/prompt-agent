@@ -9,6 +9,7 @@ import typer
 
 from prompt_agent.core.client import PromptClient, PromptGenerationError
 from prompt_agent.core.config import load_config
+from prompt_agent.memory import ContextEvent, append_event, ensure_global_dirs
 from prompt_agent.storage.library import save_prompt
 
 
@@ -49,6 +50,20 @@ def new(
         trade_offs=result.trade_offs,
         tags=tag,
     )
+
+    # Record to memory (best-effort: don't fail the command on memory errors).
+    try:
+        ensure_global_dirs()
+        append_event(
+            ContextEvent.now(
+                "new",
+                f"generated '{saved.name}' v{saved.version} — {description[:60]}",
+                slug=saved.slug,
+                techniques=result.techniques_used,
+            )
+        )
+    except Exception:
+        pass
 
     if json_output:
         typer.echo(

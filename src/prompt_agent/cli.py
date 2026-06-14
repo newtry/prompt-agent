@@ -6,6 +6,7 @@ import sys
 
 import typer
 
+from prompt_agent.commands.chat import chat as chat_cmd
 from prompt_agent.commands.diagnose import diagnose as diagnose_cmd
 from prompt_agent.commands.edit import edit as edit_cmd
 from prompt_agent.commands.eval import eval as eval_cmd
@@ -33,6 +34,7 @@ app.command(name="show", help="Display a prompt's metadata and body.")(show_cmd)
 app.command(name="edit", help="Open a prompt in $EDITOR; saves as a new version on change.")(edit_cmd)
 app.command(name="diagnose", help="Analyze an existing prompt and suggest fixes.")(diagnose_cmd)
 app.command(name="eval", help="Run a test suite against a prompt and report results.")(eval_cmd)
+app.command(name="chat", help="Start the interactive REPL for prompt engineering.")(chat_cmd)
 app.add_typer(library_app, name="library")
 
 

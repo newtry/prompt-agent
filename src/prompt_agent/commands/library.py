@@ -9,6 +9,7 @@ from pathlib import Path
 import frontmatter
 import typer
 
+from prompt_agent.memory import ContextEvent, append_event, ensure_global_dirs
 from prompt_agent.storage.library import (
     fork_prompt,
     list_prompts,
@@ -104,6 +105,18 @@ def fork_cmd(
         _write_meta(new_saved.slug, meta)
     typer.echo(f"[green]✓[/green] Forked {slug} → {new_saved.slug} (v{new_saved.version})")
     typer.echo(f"  Path: {new_saved.path}")
+    try:
+        ensure_global_dirs()
+        append_event(
+            ContextEvent.now(
+                "fork",
+                f"forked {slug} → {new_saved.slug}",
+                slug=new_saved.slug,
+                source=slug,
+            )
+        )
+    except Exception:
+        pass
 
 
 @library_app.command("save")
@@ -119,6 +132,18 @@ def save_cmd(
     saved = save_from_file(file, name=name, tags=tag)
     typer.echo(f"[green]✓[/green] Imported: {saved.path}")
     typer.echo(f"  Slug: {saved.slug}  |  Version: v{saved.version}")
+    try:
+        ensure_global_dirs()
+        append_event(
+            ContextEvent.now(
+                "save",
+                f"imported '{saved.name}' from {file.name}",
+                slug=saved.slug,
+                source_path=str(file),
+            )
+        )
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -224,6 +249,18 @@ def seed_install_cmd(
             saved = save_from_file(tmp, name=None)
             typer.echo(f"[green]✓[/green] {n} -> {saved.slug} v{saved.version}")
             installed += 1
+            try:
+                ensure_global_dirs()
+                append_event(
+                    ContextEvent.now(
+                        "seed_install",
+                        f"installed seed '{n}'",
+                        slug=saved.slug,
+                        seed=n,
+                    )
+                )
+            except Exception:
+                pass
         finally:
             try:
                 tmp.unlink()

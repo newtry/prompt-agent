@@ -14,6 +14,13 @@ from prompt_agent.core.config import load_config
 from prompt_agent.evaluators.llm_judge import LLMJudge, verdict_to_result
 from prompt_agent.evaluators.rule import evaluate_rules
 from prompt_agent.evaluators.schema import EvalResult, Suite, load_suite
+from prompt_agent.memory import (
+    ContextEvent,
+    EvalRun,
+    append_event,
+    ensure_global_dirs,
+    save_eval_run,
+)
 from prompt_agent.storage.library import load_prompt
 
 
@@ -109,6 +116,46 @@ def _print_failures(results: list[EvalResult]) -> None:
         failed_criteria = [k for k, v in r.criteria_results.items() if not v]
         if failed_criteria:
             typer.echo(f"  Failed criteria: {', '.join(failed_criteria)}")
+
+
+def _record_eval_run(
+    slug: str,
+    results: list[EvalResult],
+    agent_model: str,
+    judge_model: str,
+    suite_path: Path,
+    candidate_version: int | None = None,
+    baseline_version: int | None = None,
+    note: str = "",
+) -> None:
+    """Persist a single eval run to memory (best-effort)."""
+    try:
+        ensure_global_dirs()
+        run = EvalRun.from_results(
+            slug=slug,
+            results=results,
+            agent_model=agent_model,
+            judge_model=judge_model,
+            suite_path=str(suite_path),
+            baseline_version=baseline_version,
+            candidate_version=candidate_version,
+            note=note,
+        )
+        path = save_eval_run(run)
+        n = len(results) or 1
+        passed = sum(1 for r in results if r.overall_pass)
+        append_event(
+            ContextEvent.now(
+                "eval",
+                f"eval {slug}: {passed}/{n} pass ({run.pass_rate*100:.0f}%)",
+                slug=slug,
+                run_id=run.run_id,
+                pass_rate=run.pass_rate,
+            )
+        )
+        typer.echo(f"\n[dim]Saved eval run: {path.name}[/dim]")
+    except Exception as e:  # noqa: BLE001 — memory is best-effort
+        typer.echo(f"\n[yellow]warning:[/yellow] could not save eval run: {e}", err=True)
 
 
 def _print_comparison(
@@ -242,6 +289,15 @@ def eval(
             return
         _print_single_table(candidate_results, candidate_label)
         _print_failures(candidate_results)
+        if slug:
+            _record_eval_run(
+                slug=slug,
+                results=candidate_results,
+                agent_model=agent_model,
+                judge_model=judge_model,
+                suite_path=suite,
+                candidate_version=version,
+            )
         return
 
     # Comparison mode
@@ -282,3 +338,23 @@ def eval(
         return
 
     _print_comparison(baseline_results, candidate_results, baseline_label, candidate_label)
+    if slug:
+        _record_eval_run(
+            slug=slug,
+            results=baseline_results,
+            agent_model=agent_model,
+            judge_model=judge_model,
+            suite_path=suite,
+            candidate_version=baseline_saved.version,
+            note="auto-recorded from --baseline eval",
+        )
+        _record_eval_run(
+            slug=slug,
+            results=candidate_results,
+            agent_model=agent_model,
+            judge_model=judge_model,
+            suite_path=suite,
+            candidate_version=version,
+            baseline_version=baseline_saved.version,
+            note=f"compared against v{baseline_saved.version}",
+        )

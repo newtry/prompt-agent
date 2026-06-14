@@ -12,6 +12,7 @@ from pathlib import Path
 import frontmatter
 import typer
 
+from prompt_agent.memory import ContextEvent, append_event, ensure_global_dirs
 from prompt_agent.storage.library import get_current_version, load_prompt, save_prompt, slugify
 
 
@@ -79,6 +80,20 @@ def edit(
         )
         typer.echo(f"[green]✓[/green] Saved as v{new_saved.version} (was v{current_version})")
         typer.echo(f"  Path: {new_saved.path}")
+        # Record to memory.
+        try:
+            ensure_global_dirs()
+            append_event(
+                ContextEvent.now(
+                    "edit",
+                    f"edited '{saved.name}' v{current_version} → v{new_saved.version}",
+                    slug=saved.slug,
+                    from_version=current_version,
+                    to_version=new_saved.version,
+                )
+            )
+        except Exception:
+            pass
     finally:
         try:
             tmp_path.unlink()

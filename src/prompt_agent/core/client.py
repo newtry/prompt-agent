@@ -176,3 +176,17 @@ class PromptClient:
         )
         text = message.content[0].text
         return _parse_diagnosis(text)
+
+    def chat(self, messages: list[dict], system: str, max_tokens: int = 4096) -> str:
+        """Multi-turn chat completion. Returns the assistant's text reply.
+
+        `messages` is a list of {"role", "content"} dicts in OpenAI/Anthropic
+        chat format. `system` is a system prompt.
+        """
+        message = self._client.messages.create(
+            model=self.model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=list(messages),
+        )
+        return message.content[0].text
